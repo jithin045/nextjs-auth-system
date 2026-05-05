@@ -1,18 +1,47 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { login, googleLogin } from "@/services/auth";
-import { Mail, Lock, LogIn, Loader2, Eye, EyeOff, Github, ArrowRight } from "lucide-react";
+import { auth } from "@/services/firebase"; // Required for route protection
+import { onAuthStateChanged } from "firebase/auth"; // Required to listen to auth state
+import { 
+  Mail, 
+  Lock, 
+  LogIn, 
+  Loader2, 
+  Eye, 
+  EyeOff, 
+  ArrowRight 
+} from "lucide-react";
 
 export default function Login() {
+  // Form State
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
+  
+  // UI States
+  const [loading, setLoading] = useState(false); // For button clicks
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true); // For initial page load
   const [error, setError] = useState("");
 
   const router = useRouter();
+
+  // 🛡️ Route Protection: Redirect if user is already logged in
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        // User is authenticated, skip login page
+        router.push("/dashboard");
+      } else {
+        // No user found, allow them to see the login form
+        setIsCheckingAuth(false);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
 
   const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -32,13 +61,25 @@ export default function Login() {
       } else {
         await googleLogin();
       }
+      // Success! Move to dashboard
       router.push("/dashboard");
     } catch (err) {
       setError(err.message || "Authentication failed. Try again.");
-    } finally {
-      setLoading(false);
+      setLoading(false); // Stop loading only if there's an error so user can retry
     }
   };
+
+  // While we check the Firebase session, show loading screen
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 text-blue-500 animate-spin" />
+          <p className="text-slate-400 text-sm font-medium animate-pulse">Verifying session...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#0f172a] relative overflow-hidden px-4 font-sans">
@@ -53,9 +94,9 @@ export default function Login() {
       >
         <div className="bg-white/5 backdrop-blur-2xl rounded-3xl shadow-2xl p-8 border border-white/10">
           
-          {/* Brand/Header */}
+          {/* Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-violet-500 mb-4 shadow-lg">
+            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-tr from-blue-600 to-violet-500 mb-4 shadow-lg shadow-blue-500/20">
               <LogIn className="text-white h-7 w-7" />
             </div>
             <h1 className="text-3xl font-bold text-white tracking-tight">Welcome Back</h1>
@@ -63,15 +104,15 @@ export default function Login() {
           </div>
 
           {/* Error Banner */}
-          <AnimatePresence>
+          <AnimatePresence mode="wait">
             {error && (
               <motion.div 
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: "auto" }}
                 exit={{ opacity: 0, height: 0 }}
-                className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-xs mb-6 flex items-center gap-2"
+                className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-xl text-xs mb-6 flex items-center gap-2 overflow-hidden"
               >
-                <div className="w-1 h-1 rounded-full bg-red-400 animate-ping" />
+                <div className="w-1.5 h-1.5 rounded-full bg-red-400 animate-ping" />
                 {error}
               </motion.div>
             )}
@@ -85,7 +126,8 @@ export default function Login() {
                 name="email"
                 type="email"
                 placeholder="Email address"
-                className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white transition-all"
+                required
+                className="w-full pl-12 pr-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white transition-all placeholder:text-slate-600"
                 onChange={handleChange}
               />
             </div>
@@ -97,7 +139,8 @@ export default function Login() {
                 name="password"
                 type={showPassword ? "text" : "password"}
                 placeholder="Password"
-                className="w-full pl-12 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white transition-all"
+                required
+                className="w-full pl-12 pr-12 py-3 bg-white/5 border border-white/10 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 text-white transition-all placeholder:text-slate-600"
                 onChange={handleChange}
               />
               <button
@@ -109,21 +152,29 @@ export default function Login() {
               </button>
             </div>
 
-            {/* Main Action */}
+            {/* Main Action Button */}
             <motion.button
               whileTap={{ scale: 0.98 }}
               onClick={() => handleAuth("email")}
               disabled={loading}
               className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 shadow-xl shadow-blue-900/20 disabled:opacity-50"
             >
-              {loading ? <Loader2 className="animate-spin h-5 w-5" /> : <span className="flex items-center gap-2 font-bold">Sign In <ArrowRight className="h-4 w-4" /></span>}
+              {loading ? (
+                <Loader2 className="animate-spin h-5 w-5" />
+              ) : (
+                <span className="flex items-center gap-2 font-bold">
+                  Sign In <ArrowRight className="h-4 w-4" />
+                </span>
+              )}
             </motion.button>
           </div>
 
           {/* Divider */}
           <div className="relative flex items-center justify-center my-8">
             <div className="w-full border-t border-white/5"></div>
-            <span className="absolute px-4 bg-[#1e293b] text-[10px] text-slate-500 uppercase tracking-[0.2em] font-medium">Continue with</span>
+            <span className="absolute px-4 bg-[#111c2e] text-[10px] text-slate-500 uppercase tracking-[0.2em] font-medium">
+              Continue with
+            </span>
           </div>
 
           {/* Social Auth */}
